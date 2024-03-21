@@ -15,6 +15,16 @@ pub fn spin() noreturn {
     while (true) {}
 }
 
+pub fn cpu_idx() usize {
+    var tpidr: u64 = undefined;
+
+    asm volatile ("mrs %[tpidr], tpidr_el2"
+        : [tpidr] "=r" (tpidr),
+    );
+
+    return tpidr & 0xfff;
+}
+
 extern fn va2pa(va: u64) u64;
 extern var dtb_pa: u64;
 extern var start_pa: u64;
@@ -87,22 +97,7 @@ pub fn start_vm(kernel_image: []const u8) noreturn {
         mmu.map_normal_s2(&vm_pgd, addr, addr, size);
     }
 
-    const vtcr_el2: u64 = (64 - 39) | (1 << 6) | (1 << 8) | (1 << 10) | (3 << 12) | (1 << 31) | (2 << 16); // 40-bit IPA
-    const vm_pgd_pa: u64 = (vm_pgd[0] >> 12) << 12;
-    asm volatile (
-        \\ dsb sy
-        \\ msr vttbr_el2, %[vm_pgd]
-        \\ msr sctlr_el1, %[sctlr_el1]
-        \\ msr vtcr_el2, %[vtcr]
-        \\ isb sy
-        :
-        : [vm_pgd] "r" (vm_pgd_pa),
-          [sctlr_el1] "r" (0x30d00800),
-          [vtcr] "r" (vtcr_el2),
-        : "memory"
-    );
-
-    VCPU.enable();
+    vcpus[0].enable();
     vcpus[0].x[0] = dtb_pa;
     vcpus[0].x[VCPU.ELR] = kernel_pa;
     vcpus[0].x[VCPU.SPSR] = (1 << 9) | (1 << 8) | (1 << 7) | (1 << 6) | 5; // EL1h

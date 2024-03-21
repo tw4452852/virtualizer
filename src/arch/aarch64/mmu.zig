@@ -161,7 +161,7 @@ fn map(pgd: *[512]u64, pa: u64, va: u64, len: u64, mem_attr: u64) ?[*]u8 {
         }
 
         const pud = ptrFromPte(*[512]u64, pgd[pgd_idx]);
-        print("pud: {x} at {} of pgd\n", .{ va2pa(@intFromPtr(pud)), pgd_idx });
+        //print("pud: {x} at {} of pgd\n", .{ va2pa(@intFromPtr(pud)), pgd_idx });
         for ((unmapped_va >> pud_shift) & pud_mask..512) |pud_idx| {
             if (!pte_is_valid(pud[pud_idx])) {
                 if (freed.toggleFirstSet()) |i| {
@@ -175,7 +175,7 @@ fn map(pgd: *[512]u64, pa: u64, va: u64, len: u64, mem_attr: u64) ?[*]u8 {
             }
 
             const pmd = ptrFromPte(*[512]u64, pud[pud_idx]);
-            print("pmd: {x} at {} of pud\n", .{ va2pa(@intFromPtr(pmd)), pud_idx });
+            //print("pmd: {x} at {} of pud\n", .{ va2pa(@intFromPtr(pmd)), pud_idx });
             for ((unmapped_va >> pmd_shift) & pmd_mask..512) |pmd_idx| {
                 if (!pte_is_valid(pmd[pmd_idx])) {
                     if (unmapped_len >= pmd_size and std.mem.isAligned(unmapped_va, pmd_size) and std.mem.isAligned(unmapped_pa, pmd_size)) {
@@ -202,7 +202,7 @@ fn map(pgd: *[512]u64, pa: u64, va: u64, len: u64, mem_attr: u64) ?[*]u8 {
                 if (pmd[pmd_idx] & (1 << 1) != 0) {
                     // page table
                     const pt = ptrFromPte(*[512]u64, pmd[pmd_idx]);
-                    print("pt: {x} at {} of pmd\n", .{ va2pa(@intFromPtr(pt)), pmd_idx });
+                    //print("pt: {x} at {} of pmd\n", .{ va2pa(@intFromPtr(pt)), pmd_idx });
                     for ((unmapped_va >> page_shift) & ((1 << 9) - 1)..512) |pt_idx| {
                         pt[pt_idx] = (unmapped_pa & ~@as(u64, page_size - 1)) | (1 << 0) | (1 << 1) | mem_attr;
                         //print("mapped {x} {x} sized page at {} of pt\n", .{ unmapped_pa, page_size, pt_idx });
@@ -259,7 +259,7 @@ pub fn unmap(pgd: *[512]u64, va: u64, len: u64) void {
                                 unmapped_va = (unmapped_va & ~@as(u64, (pmd_size - 1))) + pmd_size;
                                 if (unmapped_va >= va + len) return;
                             } else {
-                                const pt: *[512]u64 = @ptrFromInt(pte & ~@as(u64, page_mask));
+                                const pt = ptrFromPte(*[512]u64, pte);
                                 for ((unmapped_va >> page_shift) & ((1 << 9) - 1)..512) |pt_idx| {
                                     pt[pt_idx] &= ~@as(u64, 1);
                                     unmapped_va += page_size;

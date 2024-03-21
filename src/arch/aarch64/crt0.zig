@@ -4,15 +4,23 @@ const lib = @import("root.zig");
 const mmu = @import("mmu.zig");
 const VCPU = @import("vcpu.zig");
 
-export var stack_bytes: [4 * 1024]u8 align(1 << 12) linksection(".bss") = undefined;
+const start_va = (2 << 20); // match with the definition of _start in linker.ld
+
+const max_cpus = 32;
+export var stack_bytes: [max_cpus][4 * 1024]u8 align(1 << 12) linksection(".bss") = undefined;
 export var pgd: [512]u64 align(1 << 12) = .{0} ** 512;
 export var vm_pgd: [512]u64 align(1 << 12) = .{0} ** 512;
-var _vcpus: [32]VCPU = .{VCPU{}} ** 32;
-export const vcpus: *[32]VCPU = &_vcpus;
+var _vcpus: [max_cpus]VCPU = .{VCPU{}} ** max_cpus;
+export const vcpus: *[max_cpus]VCPU = &_vcpus;
+export var start_pa: u64 = 0;
+export var end_pa: u64 = 0;
 
-extern var dtb_pa: u64;
-extern var start_pa: u64;
-extern var end_pa: u64;
+pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
+    const first_trace_addr = ret_addr orelse @returnAddress();
+    lib.print("Panic: {s}, ret_addr: {x}\n", .{ msg, first_trace_addr });
+    while (true) {}
+}
+
 export fn _start() callconv(.Naked) noreturn {
     asm volatile (
         \\ adr x1, vector_table
@@ -21,17 +29,14 @@ export fn _start() callconv(.Naked) noreturn {
         \\ add x1, x1, #0x1000
         \\ msr tpidr_el2, x1
         \\ mov sp, x1
+        \\ adr x1, dtb_pa
+        \\ str x0, [x1]
+        \\ mov x0, #0
         \\ b arch_init
         \\ b . // unreachable
         \\
         \\ .global dtb_pa
         \\ dtb_pa:
-        \\ .quad 0
-        \\ .global start_pa
-        \\ start_pa:
-        \\ .quad 0
-        \\ .global end_pa
-        \\ end_pa:
         \\ .quad 0
         \\
         \\ .align 7
@@ -71,6 +76,35 @@ export fn _start() callconv(.Naked) noreturn {
     );
 }
 
+export fn secondary_start() callconv(.Naked) noreturn {
+    asm volatile (
+        \\ msr spsel, #1
+        \\ adr x1, vector_table
+        \\ msr vbar_el2, x1
+        \\ adr x0, start_core_id
+        \\ ldr x0, [x0]
+        \\ adrp x1, stack_bytes
+        \\ add x1, x1, x0, lsl #12
+        \\ add x1, x1, #0x1000
+        \\ mov sp, x1
+        \\ add x1, x1, x0
+        \\ msr tpidr_el2, x1
+        \\ b secondary_init
+        \\ b . // unreachable
+        \\
+        \\ .align 3
+        \\ .global start_core_id
+        \\ start_core_id:
+        \\ .quad 0
+    );
+}
+
+export fn secondary_init(cpu: u64) noreturn {
+    lib.print("CPU{} up\n", .{cpu});
+
+    arch_init(cpu);
+}
+
 export fn exception_handler_begin() callconv(.Naked) noreturn {
     asm volatile (
         \\ stp x0,  x1,  [sp, #16 * 0]
@@ -94,6 +128,7 @@ export fn exception_handler_begin() callconv(.Naked) noreturn {
         \\ mrs x23, spsr_el2
         \\ stp x22, x23, [sp, #16 * 16]
         \\ mrs x0, tpidr_el2
+        \\ bic x0, x0, #0xfff
         \\ mov sp, x0
         \\ b exception_handler
     );
@@ -124,51 +159,61 @@ export fn exception_handler() noreturn {
     hpfar <<= 12;
 
     const el = (spsr >> 2) & 3;
-    lib.print("exception taken from EL{}, esr: {x}, far: {x}, pc: {x}, hpfar: {x}\n", .{ el, esr, far, pc, hpfar });
+    const cpu = lib.cpu_idx();
+    lib.print("exception taken from EL{} on CPU{}, esr: {x}, far: {x}, pc: {x}, hpfar: {x}\n", .{ el, cpu, esr, far, pc, hpfar });
     const ec = (esr >> 26) & 0x3f;
     const isv = (esr >> 24) & 1;
-    if (el < 2 and ec == 0x24 and isv == 1) {
-        // data abort
-        if (std.mem.isAligned(hpfar, (2 << 20))) {
-            mmu.map_normal_s2(&vm_pgd, hpfar, hpfar, (2 << 20));
-        } else {
-            mmu.map_normal_s2(&vm_pgd, hpfar, hpfar, (1 << 12));
+    if (el < 2) {
+        if (ec == 0x24 and isv == 1) { // data abort
+            if (std.mem.isAligned(hpfar, (2 << 20))) {
+                mmu.map_normal_s2(&vm_pgd, hpfar, hpfar, (2 << 20));
+            } else {
+                mmu.map_normal_s2(&vm_pgd, hpfar, hpfar, (1 << 12));
+            }
+            _vcpus[cpu].restore();
+        } else if (ec == 0x17) { // SMC
+            _vcpus[cpu].handle_smc();
+            _vcpus[cpu].restore();
         }
-        _vcpus[0].restore();
     }
 
     lib.spin();
 }
 
-export fn arch_init(x0: u64) noreturn {
-    lib.print("Enter arch init, dtb: {x}\n", .{x0});
+export fn arch_init(cpu: u64) noreturn {
+    lib.print("CPU{} enter arch init\n", .{cpu});
     defer lib.print("Exit arch exit\n", .{});
 
     ensure_current_in_el2();
 
-    enable_mmu();
-
-    dtb_pa = x0;
+    enable_mmu(cpu);
 
     asm volatile (
+        \\ mov x0, %[cpu]
         \\ ldr x8, =stack_bytes
+        \\ add x8, x8, x0, lsl #12
         \\ add x8, x8, #0x1000
         \\ mov sp, x8
         \\ ldr x8, =vector_table
         \\ msr vbar_el2, x8
         \\ ldr x8, =mmu_enabled
         \\ br x8
+        :
+        : [cpu] "r" (cpu),
     );
 
     lib.spin();
 }
 
-export fn mmu_enabled() noreturn {
-    //remove_identical_mapping();
-
-    asm volatile (
-        \\ b main
-    );
+extern var start_core_id: u64;
+export fn mmu_enabled(cpu: u64) noreturn {
+    if (cpu == 0) {
+        asm volatile ("b main");
+    } else {
+        start_core_id = 0;
+        _vcpus[cpu].enable();
+        _vcpus[cpu].restore();
+    }
     lib.spin();
 }
 
@@ -197,29 +242,40 @@ export fn pa2va(pa: u64) u64 {
     return @bitCast(@as(i64, @bitCast(pa)) - va_offset);
 }
 
-fn enable_mmu() void {
+fn enable_mmu(cpu: u64) void {
     lib.mmu.disable();
 
-    asm volatile (
-        \\ adr %[start], _start
-        \\ adrp %[end], _end
-        \\ add %[end], %[end], #:lo12:_end
-        : [start] "=r" (start_pa),
-          [end] "=r" (end_pa),
-    );
+    if (cpu == 0) {
+        asm volatile (
+            \\ adr %[start], _start
+            \\ adrp %[end], _end
+            \\ add %[end], %[end], #:lo12:_end
+            : [start] "=r" (start_pa),
+              [end] "=r" (end_pa),
+        );
 
-    lib.print("real load range: {x}, end: {x}\n", .{ start_pa, end_pa });
-    const start_va = (2 << 20); // match with the definition of _start in linker.ld
-    const len = std.mem.alignForward(u64, end_pa - start_pa, std.mem.page_size);
-    _ = lib.mmu.map_normal(&pgd, start_pa, start_pa, len); // temporary identical mapping, will be unmapped after MMU enable
-    _ = lib.mmu.map_normal(&pgd, start_pa, start_va, len);
-    _ = lib.mmu.map_device(&pgd, serial.base, serial.base, 0x1000);
+        lib.print("real load range: {x}, end: {x}\n", .{ start_pa, end_pa });
+        const len = std.mem.alignForward(u64, end_pa - start_pa, std.mem.page_size);
+        add_identical_mapping();
+        _ = lib.mmu.map_normal(&pgd, start_pa, start_va, len);
+        _ = lib.mmu.map_device(&pgd, serial.base, serial.base, 0x1000);
+        // must be put after mmu.map because it relies on va_offset
+        va_offset = @as(i64, @bitCast(start_pa)) - start_va;
+
+        asm volatile ("msr tpidr_el2, %[va]"
+            :
+            : [va] "r" (pa2va(@intFromPtr(&stack_bytes[0]) + 0x1000)),
+        );
+    }
 
     lib.mmu.enable();
 
-    va_offset = @as(i64, @bitCast(start_pa)) - start_va;
-
     lib.print("MMU enabled\n", .{});
+}
+
+fn add_identical_mapping() void {
+    const len = std.mem.alignForward(u64, end_pa - start_pa, std.mem.page_size);
+    _ = lib.mmu.map_normal(&pgd, start_pa, start_pa, len); // temporary identical mapping, will be unmapped after MMU enable
 }
 
 fn remove_identical_mapping() void {
@@ -227,17 +283,6 @@ fn remove_identical_mapping() void {
         return;
     }
 
-    var start_va: u64 = undefined;
-    var end_va: u64 = undefined;
-
-    asm volatile (
-        \\ adr %[start], _start
-        \\ adrp %[end], _end
-        \\ add %[end], %[end], #:lo12:_end
-        : [start] "={x0}" (start_va),
-          [end] "={x1}" (end_va),
-    );
-
-    const len = std.mem.alignForward(u64, end_va - start_va, std.mem.page_size);
+    const len = std.mem.alignForward(u64, end_pa - start_pa, std.mem.page_size);
     lib.mmu.unmap(&pgd, va2pa(start_va), len);
 }
