@@ -7,7 +7,7 @@ image="$1"; shift
 "/home/tw/code/qemu/build/qemu-system-aarch64" \
   "-machine" "virt,virtualization=on,highmem=off,secure=off" \
   "-cpu" "cortex-a76" \
-  "-smp" "4" \
+  "-smp" "2" \
   "-m" "2G" \
   "-serial" "mon:stdio" "-nographic" \
   "-kernel" "${image}" \

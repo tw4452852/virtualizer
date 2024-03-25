@@ -3,6 +3,7 @@ const serial = @import("serial.zig");
 const lib = @import("root.zig");
 const mmu = @import("mmu.zig");
 const VCPU = @import("vcpu.zig");
+const GIC2 = @import("gic2.zig");
 
 const start_va = (2 << 20); // match with the definition of _start in linker.ld
 
@@ -14,6 +15,8 @@ var _vcpus: [max_cpus]VCPU = .{VCPU{}} ** max_cpus;
 export const vcpus: *[max_cpus]VCPU = &_vcpus;
 export var start_pa: u64 = 0;
 export var end_pa: u64 = 0;
+var _gicv2: GIC2 = .{};
+export var gic2: *GIC2 = &_gicv2;
 
 pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
     const first_trace_addr = ret_addr orelse @returnAddress();
@@ -42,37 +45,37 @@ export fn _start() callconv(.Naked) noreturn {
         \\ .align 7
         \\ .global vector_table
         \\ vector_table:
-        \\ b exception_handler_begin // Synchronous EL2t
+        \\ b exception_0 // Synchronous EL2t
         \\ .align 7
-        \\ b exception_handler_begin // IRQ EL2t
+        \\ b exception_1 // IRQ EL2t
         \\ .align 7
-        \\ b exception_handler_begin // FIQ EL2t
+        \\ b exception_2 // FIQ EL2t
         \\ .align 7
-        \\ b exception_handler_begin // SError EL2t
+        \\ b exception_3 // SError EL2t
         \\ .align 7
-        \\ b exception_handler_begin // Synchronous EL2h
+        \\ b exception_4 // Synchronous EL2h
         \\ .align 7
-        \\ b exception_handler_begin // IRQ EL2h
+        \\ b exception_5 // IRQ EL2h
         \\ .align 7
-        \\ b exception_handler_begin // FIQ EL2h
+        \\ b exception_6 // FIQ EL2h
         \\ .align 7
-        \\ b exception_handler_begin // SError EL2h
+        \\ b exception_7 // SError EL2h
         \\ .align 7
-        \\ b exception_handler_begin // Synchronous 64bit lower EL
+        \\ b exception_8 // Synchronous 64bit lower EL
         \\ .align 7
-        \\ b exception_handler_begin // IRQ 64bit lower EL
+        \\ b exception_9 // IRQ 64bit lower EL
         \\ .align 7
-        \\ b exception_handler_begin // FIQ 64bit lower EL
+        \\ b exception_10 // FIQ 64bit lower EL
         \\ .align 7
-        \\ b exception_handler_begin // SError 64bit lower EL
+        \\ b exception_11 // SError 64bit lower EL
         \\ .align 7
-        \\ b exception_handler_begin // Synchronous 32bit lower EL
+        \\ b exception_12 // Synchronous 32bit lower EL
         \\ .align 7
-        \\ b exception_handler_begin // IRQ 32bit lower EL
+        \\ b exception_13 // IRQ 32bit lower EL
         \\ .align 7
-        \\ b exception_handler_begin // FIQ 32bit lower EL
+        \\ b exception_14 // FIQ 32bit lower EL
         \\ .align 7
-        \\ b exception_handler_begin // SError 32bit lower EL
+        \\ b exception_15 // SError 32bit lower EL
     );
 }
 
@@ -105,38 +108,49 @@ export fn secondary_init(cpu: u64) noreturn {
     arch_init(cpu);
 }
 
-export fn exception_handler_begin() callconv(.Naked) noreturn {
-    asm volatile (
-        \\ stp x0,  x1,  [sp, #16 * 0]
-        \\ stp x2,  x3,  [sp, #16 * 1]
-        \\ stp x4,  x5,  [sp, #16 * 2]
-        \\ stp x6,  x7,  [sp, #16 * 3]
-        \\ stp x8,  x9,  [sp, #16 * 4]
-        \\ stp x10, x11, [sp, #16 * 5]
-        \\ stp x12, x13, [sp, #16 * 6]
-        \\ stp x14, x15, [sp, #16 * 7]
-        \\ stp x16, x17, [sp, #16 * 8]
-        \\ stp x18, x19, [sp, #16 * 9]
-        \\ stp x20, x21, [sp, #16 * 10]
-        \\ stp x22, x23, [sp, #16 * 11]
-        \\ stp x24, x25, [sp, #16 * 12]
-        \\ stp x26, x27, [sp, #16 * 13]
-        \\ stp x28, x29, [sp, #16 * 14]
-        \\ mrs x21, sp_el0
-        \\ stp x30, x21, [sp, #16 * 15]
-        \\ mrs x22, elr_el2
-        \\ mrs x23, spsr_el2
-        \\ stp x22, x23, [sp, #16 * 16]
-        \\ mrs x0, tpidr_el2
-        \\ bic x0, x0, #0xfff
-        \\ mov sp, x0
-        \\ b exception_handler
-    );
+comptime {
+    for (0..16) |i| {
+        const S = struct {
+            fn exception_handler_begin() callconv(.Naked) noreturn {
+                asm volatile (
+                    \\ stp x0,  x1,  [sp, #16 * 0]
+                    \\ stp x2,  x3,  [sp, #16 * 1]
+                    \\ stp x4,  x5,  [sp, #16 * 2]
+                    \\ stp x6,  x7,  [sp, #16 * 3]
+                    \\ stp x8,  x9,  [sp, #16 * 4]
+                    \\ stp x10, x11, [sp, #16 * 5]
+                    \\ stp x12, x13, [sp, #16 * 6]
+                    \\ stp x14, x15, [sp, #16 * 7]
+                    \\ stp x16, x17, [sp, #16 * 8]
+                    \\ stp x18, x19, [sp, #16 * 9]
+                    \\ stp x20, x21, [sp, #16 * 10]
+                    \\ stp x22, x23, [sp, #16 * 11]
+                    \\ stp x24, x25, [sp, #16 * 12]
+                    \\ stp x26, x27, [sp, #16 * 13]
+                    \\ stp x28, x29, [sp, #16 * 14]
+                    \\ mrs x21, sp_el0
+                    \\ stp x30, x21, [sp, #16 * 15]
+                    \\ mrs x22, elr_el2
+                    \\ mrs x23, spsr_el2
+                    \\ stp x22, x23, [sp, #16 * 16]
+                    \\ mrs x0, tpidr_el2
+                    \\ bic x0, x0, #0xfff
+                    \\ mov sp, x0
+                    \\ mov x0, %[i]
+                    \\ b exception_handler
+                    :
+                    : [i] "i" (i),
+                );
 
-    while (true) {}
+                while (true) {}
+            }
+        };
+
+        @export(S.exception_handler_begin, .{ .name = std.fmt.comptimePrint("exception_{}", .{i}), .linkage = .strong });
+    }
 }
 
-export fn exception_handler() noreturn {
+export fn exception_handler(n: usize) noreturn {
     var esr: u64 = undefined;
     var far: u64 = undefined;
     var pc: u64 = undefined;
@@ -160,19 +174,18 @@ export fn exception_handler() noreturn {
 
     const el = (spsr >> 2) & 3;
     const cpu = lib.cpu_idx();
-    lib.print("exception taken from EL{} on CPU{}, esr: {x}, far: {x}, pc: {x}, hpfar: {x}\n", .{ el, cpu, esr, far, pc, hpfar });
+    //lib.print("exception {} taken from EL{} on CPU{}, esr: {x}, far: {x}, pc: {x}, hpfar: {x}\n", .{ n, el, cpu, esr, far, pc, hpfar });
     const ec = (esr >> 26) & 0x3f;
     const isv = (esr >> 24) & 1;
     if (el < 2) {
-        if (ec == 0x24 and isv == 1) { // data abort
-            if (std.mem.isAligned(hpfar, (2 << 20))) {
-                mmu.map_normal_s2(&vm_pgd, hpfar, hpfar, (2 << 20));
-            } else {
-                mmu.map_normal_s2(&vm_pgd, hpfar, hpfar, (1 << 12));
-            }
+        if (n == 8 and ec == 0x24 and isv == 1) { // data abort
+            mmu.map_normal_s2(&vm_pgd, hpfar, hpfar, (1 << 12));
             _vcpus[cpu].restore();
-        } else if (ec == 0x17) { // SMC
+        } else if (n == 8 and ec == 0x17) { // SMC
             _vcpus[cpu].handle_smc();
+            _vcpus[cpu].restore();
+        } else if (n == 9) {
+            _vcpus[cpu].handle_irq();
             _vcpus[cpu].restore();
         }
     }

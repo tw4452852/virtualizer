@@ -1,5 +1,6 @@
 const std = @import("std");
 const VCPU = @import("vcpu.zig");
+pub const GIC2 = @import("gic2.zig");
 pub const mmu = @import("mmu.zig");
 const c = @cImport({
     @cInclude("libfdt.h");
@@ -32,6 +33,7 @@ extern var end_pa: u64;
 extern var pgd: [512]u64 align(1 << 12);
 extern var vm_pgd: [512]u64 align(1 << 12);
 extern var vcpus: *[32]VCPU;
+extern var gic2: *GIC2;
 
 pub fn start_vm(kernel_image: []const u8) noreturn {
     var image_end_va: u64 = undefined;
@@ -89,14 +91,25 @@ pub fn start_vm(kernel_image: []const u8) noreturn {
     var len: c_int = undefined;
     const pp = c.fdt_get_property(dtb, mem_node_offset, "reg", &len).?;
     for (0..@as(c_uint, @bitCast(len)) / 16) |i| {
+        @setRuntimeSafety(false);
         const data = pp.*.data();
 
-        const addr = c.fdt64_to_cpu(@as(*const u64, @alignCast(@ptrCast(data))).*);
-        const size = c.fdt64_to_cpu(@as(*const u64, @alignCast(@ptrCast(data + 8))).*);
+        const addr = c.fdt64_to_cpu(@as(*const u64, @alignCast(@ptrCast(data + i * 16))).*);
+        const size = c.fdt64_to_cpu(@as(*const u64, @alignCast(@ptrCast(data + i * 16 + 8))).*);
         print("memory {}: addr: {x}, size: {x}\n", .{ i, addr, size });
         mmu.map_normal_s2(&vm_pgd, addr, addr, size);
     }
 
+    if (!gic2.init(dtb)) {
+        print("failed to initialize GICv2\n", .{});
+        spin();
+    }
+
+    ret = c.fdt_pack(dtb);
+    if (ret != 0) {
+        print("failed to pack dtb: {}\n", .{ret});
+        spin();
+    }
     vcpus[0].enable();
     vcpus[0].x[0] = dtb_pa;
     vcpus[0].x[VCPU.ELR] = kernel_pa;

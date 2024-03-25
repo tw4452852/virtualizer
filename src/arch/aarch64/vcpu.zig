@@ -1,6 +1,8 @@
 const lib = @import("root.zig");
+const std = @import("std");
 
 const Self = @This();
+const BoundedArray = std.BoundedArray(u32, 16);
 
 pub const LR = 30;
 pub const SP = 31;
@@ -45,20 +47,18 @@ pub fn restore(self: *const Self) noreturn {
 }
 
 extern var vm_pgd: [512]u64 align(1 << 12);
+extern var gic2: *lib.GIC2;
 pub fn enable(_: *const Self) void {
-    const hcr_twi = (0 << 13);
-    const hcr_twe = (0 << 14);
     const hcr_vm = (1 << 0);
     const hcr_rw = (1 << 31);
-    const hcr_amo = (0 << 5); // TODO
-    const hcr_imo = (0 << 4); // TODO
-    const hcr_fmo = (0 << 3); // TODO
-    const hcr_tsc = (1 << 19); // TODO
+    const hcr_amo = (1 << 5);
+    const hcr_imo = (1 << 4);
+    const hcr_fmo = (1 << 3);
+    const hcr_tsc = (1 << 19);
 
     const vtcr_el2: u64 = (64 - 39) | (1 << 6) | (1 << 8) | (1 << 10) | (3 << 12) | (1 << 31) | (2 << 16); // 40-bit IPA
     const vm_pgd_pa: u64 = (vm_pgd[0] >> 12) << 12;
-
-    const hcr: u64 = hcr_twi | hcr_twe | hcr_vm | hcr_rw | hcr_amo | hcr_imo | hcr_fmo | hcr_tsc;
+    const hcr: u64 = hcr_vm | hcr_rw | hcr_amo | hcr_imo | hcr_fmo | hcr_tsc;
     asm volatile (
         \\ dsb sy
         \\ msr vttbr_el2, %[vm_pgd]
@@ -73,6 +73,8 @@ pub fn enable(_: *const Self) void {
           [sctlr_el1] "r" (0x30d00800),
           [vtcr] "r" (vtcr_el2),
     );
+
+    gic2.enable_vcpuif();
 }
 
 extern const vcpus: [*]Self;
@@ -123,4 +125,21 @@ pub fn handle_smc(self: *Self) void {
 
 fn psci_call(_: u64, _: u64, _: u64, _: u64) callconv(.C) void {
     asm volatile ("smc #0");
+}
+
+pub fn handle_irq(_: *Self) void {
+    while (true) {
+        const v = gic2.ack_irq();
+        const irq = v & 0x3ff;
+
+        if (irq == 1023) { // no more pending irqs
+            break;
+        }
+
+        //if (irq != 0x1b) lib.print("get irq {x} on CPU{}\n", .{ v, lib.cpu_idx() });
+
+        gic2.inject_virq(v);
+
+        gic2.eoi(v);
+    }
 }
