@@ -35,6 +35,25 @@ extern var vm_pgd: [512]u64 align(1 << 12);
 extern var vcpus: *[32]VCPU;
 extern var gic2: *GIC2;
 
+const ImageHeader = extern struct {
+	code0: u32,
+	code1: u32,
+	text_offset: u64,
+	image_size: u64,
+	flags: u64,
+	res2: u64,
+	res3: u64,
+	res4: u64,
+	magic: u32,
+	res5: u32,
+};
+const arm64_magic: u32 = @bitCast(@as([4]u8, "ARM\x64".*));
+
+fn get_kernel_image_len(p: [*c]u8) ?u64 {
+	const hdr: *align(1) ImageHeader = @ptrCast(p);
+	return if (hdr.magic == arm64_magic) std.mem.littleToNative(u64, hdr.image_size) else null;
+}
+
 pub fn start_vm(kernel_image: []const u8) noreturn {
     var image_end_va: u64 = undefined;
     var image_start_va: u64 = undefined;
@@ -75,10 +94,9 @@ pub fn start_vm(kernel_image: []const u8) noreturn {
     const kernel_pa = dtb_pa + dtb_len;
     const kernel_len = std.mem.alignForward(u64, kernel_image.len, (2 << 20));
     const kernel = mmu.map_normal(&pgd, kernel_pa, kernel_va, kernel_len).?;
-    for (0..kernel_image.len) |i| {
-        kernel[i] = kernel_image[i];
-    }
-    const real_kerne_len: u64 = std.mem.littleToNative(u64, @as(*const u64, @alignCast(@ptrCast(kernel + 16))).*);
+    @memcpy(kernel[0..kernel_image.len], kernel_image);
+
+    const real_kerne_len: u64 = if (get_kernel_image_len(kernel)) |len| len else kernel_image.len;
     print("kernel is loaded at {x}, size: {x}\n", .{ kernel_pa, real_kerne_len });
 
     mmu.map_normal_s2(&vm_pgd, kernel_pa, kernel_pa, real_kerne_len);
