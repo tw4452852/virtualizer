@@ -24,30 +24,26 @@ pub fn build(b: *std.Build) void {
 
     const prefix = b.fmt("src/arch/{s}", .{@tagName(arch)});
     const arch_mod = b.addModule("arch", .{
-        .root_source_file = .{
-            .path = b.fmt("{s}/root.zig", .{prefix}),
-        },
+        .root_source_file = b.path(b.fmt("{s}/root.zig", .{prefix})),
     });
     const crt0 = b.addObject(.{
         .name = "crt0",
-        .root_source_file = .{
-            .path = b.fmt("{s}/crt0.zig", .{prefix}),
-        },
+        .root_source_file = b.path(b.fmt("{s}/crt0.zig", .{prefix})),
         .target = target,
         .optimize = optimize,
     });
     const exe = b.addExecutable(.{
         .name = "image.elf",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     exe.addObject(crt0);
     exe.root_module.addImport("arch", arch_mod);
     exe.root_module.addAnonymousImport("kernel", .{
-        .root_source_file = .{ .path = kernel_path },
+        .root_source_file = .{ .cwd_relative = kernel_path },
     });
-    exe.setLinkerScriptPath(.{ .path = b.fmt("{s}/linker.ld", .{prefix}) });
+    exe.setLinkerScriptPath(b.path(b.fmt("{s}/linker.ld", .{prefix})));
     switch (arch) {
         .aarch64 => {
             const libfdt = b.dependency("libfdt", .{

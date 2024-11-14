@@ -146,7 +146,7 @@ comptime {
             }
         };
 
-        @export(S.exception_handler_begin, .{ .name = std.fmt.comptimePrint("exception_{}", .{i}), .linkage = .strong });
+        @export(&S.exception_handler_begin, .{ .name = std.fmt.comptimePrint("exception_{}", .{i}), .linkage = .strong });
     }
 }
 
