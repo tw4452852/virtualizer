@@ -77,7 +77,7 @@ pub fn start_vm(kernel_image: []const u8) noreturn {
         spin();
     }
 
-    const aligned_end_pa = std.mem.alignForward(u64, end_pa, std.mem.page_size);
+    const aligned_end_pa = std.mem.alignForward(u64, end_pa, std.heap.page_size_min);
     ret = c.fdt_add_mem_rsv(dtb, start_pa, aligned_end_pa - start_pa);
     if (ret != 0) {
         print("failed to add resv for image range ({x} - {x}): {}\n", .{ start_pa, aligned_end_pa, ret });

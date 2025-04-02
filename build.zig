@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addAnonymousImport("kernel", .{
         .root_source_file = .{ .cwd_relative = kernel_path },
     });
-    exe.setLinkerScriptPath(b.path(b.fmt("{s}/linker.ld", .{prefix})));
+    exe.setLinkerScript(b.path(b.fmt("{s}/linker.ld", .{prefix})));
     switch (arch) {
         .aarch64 => {
             const libfdt = b.dependency("libfdt", .{

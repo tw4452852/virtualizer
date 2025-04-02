@@ -182,7 +182,7 @@ pub fn ack_irq(self: *const Self) u32 {
         for (0..self.num_lrs) |i| {
             if ((eisr & (@as(u32, 1) << @truncate(i))) != 0) {
                 //print("lr{}: {x}\n", .{ i, self.vcpu_ctl.lr[i] });
-                const id = self.vcpu_ctl.lr[i] & 0x1fff;
+                const id = self.vcpu_ctl.lr[i] & 0x3ff;
                 self.deactive(id);
                 self.clear_lr(i);
             }

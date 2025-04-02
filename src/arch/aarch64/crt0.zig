@@ -268,7 +268,7 @@ fn enable_mmu(cpu: u64) void {
         );
 
         lib.print("real load range: {x}, end: {x}\n", .{ start_pa, end_pa });
-        const len = std.mem.alignForward(u64, end_pa - start_pa, std.mem.page_size);
+        const len = std.mem.alignForward(u64, end_pa - start_pa, std.heap.page_size_min);
         add_identical_mapping();
         _ = lib.mmu.map_normal(&pgd, start_pa, start_va, len);
         _ = lib.mmu.map_device(&pgd, serial.base, serial.base, 0x1000);
@@ -287,7 +287,7 @@ fn enable_mmu(cpu: u64) void {
 }
 
 fn add_identical_mapping() void {
-    const len = std.mem.alignForward(u64, end_pa - start_pa, std.mem.page_size);
+    const len = std.mem.alignForward(u64, end_pa - start_pa, std.heap.page_size_min);
     _ = lib.mmu.map_normal(&pgd, start_pa, start_pa, len); // temporary identical mapping, will be unmapped after MMU enable
 }
 
