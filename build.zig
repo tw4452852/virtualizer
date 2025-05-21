@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) void {
         .aarch64 => b.resolveTargetQuery(.{
             .cpu_arch = .aarch64,
             .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.cortex_a76 },
+            .cpu_features_sub = std.Target.aarch64.featureSet(&.{.fp_armv8}),
             .os_tag = .freestanding,
             .abi = .none,
         }),
