@@ -38,6 +38,7 @@ export fn _start() callconv(.Naked) noreturn {
         \\ b arch_init
         \\ b . // unreachable
         \\
+        \\ .align 3
         \\ .global dtb_pa
         \\ dtb_pa:
         \\ .quad 0
