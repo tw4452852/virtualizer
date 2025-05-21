@@ -96,7 +96,7 @@ pub fn start_vm(kernel_image: []const u8) noreturn {
     const kernel = mmu.map_normal(&pgd, kernel_pa, kernel_va, kernel_len).?;
     @memcpy(kernel[0..kernel_image.len], kernel_image);
 
-    const real_kerne_len: u64 = if (get_kernel_image_len(kernel)) |len| len else kernel_image.len;
+    const real_kerne_len: u64 = if (get_kernel_image_len(kernel)) |len| len else kernel_len;
     print("kernel is loaded at {x}, size: {x}\n", .{ kernel_pa, real_kerne_len });
 
     mmu.map_normal_s2(&vm_pgd, kernel_pa, kernel_pa, real_kerne_len);
