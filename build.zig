@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) void {
             .cpu_arch = .aarch64,
             .cpu_model = .{ .explicit = &std.Target.aarch64.cpu.cortex_a76 },
             .cpu_features_sub = std.Target.aarch64.featureSet(&.{.fp_armv8}),
+            .cpu_features_add = std.Target.aarch64.featureSet(&.{.strict_align}),
             .os_tag = .freestanding,
             .abi = .none,
         }),
