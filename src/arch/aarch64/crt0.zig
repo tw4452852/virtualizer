@@ -51,7 +51,7 @@ export fn _start() callconv(.Naked) noreturn {
         \\ dtb_pa:
         \\ .quad 0
         \\
-        \\ .align 7
+        \\ .align 11
         \\ .global vector_table
         \\ vector_table:
         \\ b exception_0 // Synchronous EL2t
