@@ -36,22 +36,22 @@ extern var vcpus: *[32]VCPU;
 extern var gic2: *GIC2;
 
 const ImageHeader = extern struct {
-	code0: u32,
-	code1: u32,
-	text_offset: u64,
-	image_size: u64,
-	flags: u64,
-	res2: u64,
-	res3: u64,
-	res4: u64,
-	magic: u32,
-	res5: u32,
+    code0: u32,
+    code1: u32,
+    text_offset: u64,
+    image_size: u64,
+    flags: u64,
+    res2: u64,
+    res3: u64,
+    res4: u64,
+    magic: u32,
+    res5: u32,
 };
 const arm64_magic: u32 = @bitCast(@as([4]u8, "ARM\x64".*));
 
 fn get_kernel_image_len(p: [*c]u8) ?u64 {
-	const hdr: *align(1) ImageHeader = @ptrCast(p);
-	return if (hdr.magic == arm64_magic) std.mem.littleToNative(u64, hdr.image_size) else null;
+    const hdr: *align(1) ImageHeader = @ptrCast(p);
+    return if (hdr.magic == arm64_magic) std.mem.littleToNative(u64, hdr.image_size) else null;
 }
 
 pub fn start_vm(kernel_image: []const u8) noreturn {
