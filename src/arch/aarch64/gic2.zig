@@ -91,11 +91,15 @@ cpu_if: *volatile CPU_IF = undefined,
 dist: *volatile DIST = undefined,
 num_lrs: usize = 0,
 maintenance_irq: u32 = 25, // TODO: retrieve from dtb
+initialized: bool = false,
 
 extern var pgd: [512]u64 align(1 << 12);
 extern var vm_pgd: [512]u64 align(1 << 12);
 
 pub fn init(self: *Self, dtb: ?[*]u8) bool {
+    if (self.initialized) {
+        @panic("already initialized gicv2");
+    }
     const root_node_offset = c.fdt_path_offset(dtb, "/");
     if (root_node_offset < 0) {
         print("failed to find root node: {}\n", .{root_node_offset});
@@ -160,15 +164,18 @@ pub fn init(self: *Self, dtb: ?[*]u8) bool {
 
     self.num_lrs = (self.vcpu_ctl.vtr & 0xf3) + 1;
     print("GICv2: {} LRs\n", .{self.num_lrs});
+    self.initialized = true;
 
     return true;
 }
 
 pub fn enable_vcpuif(self: *Self) void {
-    self.cpu_if.icontrol = 3 | (1 << 9); // enable group0&1, EOImode = 1
-    self.cpu_if.pri_msk_c = 0xf0;
-    self.cpu_if.pb_c = 3;
-    self.vcpu_ctl.hcr = 1;
+    if (self.initialized) {
+        self.cpu_if.icontrol = 3 | (1 << 9); // enable group0&1, EOImode = 1
+        self.cpu_if.pri_msk_c = 0xf0;
+        self.cpu_if.pb_c = 3;
+        self.vcpu_ctl.hcr = 1;
+    }
 }
 
 /// we handle maintenance irq internally

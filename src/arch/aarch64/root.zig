@@ -13,6 +13,7 @@ pub fn print(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn spin() noreturn {
+    print("spinning...\n", .{});
     while (true) {}
 }
 
@@ -120,7 +121,6 @@ pub fn start_vm(kernel_image: []const u8) noreturn {
 
     if (!gic2.init(dtb)) {
         print("failed to initialize GICv2\n", .{});
-        spin();
     }
 
     ret = c.fdt_pack(dtb);
