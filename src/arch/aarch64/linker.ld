@@ -4,20 +4,21 @@ SECTIONS {
 	. = 2M;
 	_start = .;
 	.text : ALIGN(4K) {
-		*(.text)
+		*(.text .text.*)
 	}
 
 	.rodata : ALIGN(4K) {
-		*(.rodata)
+		*(.rodata .rodata.*)
 	}
 
 	.data : ALIGN(4K) {
-		*(.data)
+		*(.data .data.*)
 	}
 
 	.bss : ALIGN(4K) {
-		*(COMMON)
-		*(.bss)
+		_bss_start = .;
+		*(.bss .bss.*)
+		_bss_end = .;
 	}
 	_end = .;
 }

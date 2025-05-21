@@ -26,14 +26,22 @@ pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, ret_addr: ?usize) nor
 
 export fn _start() callconv(.Naked) noreturn {
     asm volatile (
-        \\ adr x1, vector_table
-        \\ msr vbar_el2, x1
-        \\ adrp x1, stack_bytes
-        \\ add x1, x1, #0x1000
-        \\ msr tpidr_el2, x1
-        \\ mov sp, x1
-        \\ adr x1, dtb_pa
-        \\ str x0, [x1]
+        \\ adr x16, vector_table
+        \\ msr vbar_el2, x16
+        \\ adrp x16, stack_bytes
+        \\ add x16, x16, #0x16000
+        \\ msr tpidr_el2, x16
+        \\ mov sp, x16
+        \\ adr x16, dtb_pa
+        \\ str x0, [x16]
+        \\ adrp x16, _bss_start
+        \\ add x16, x16, :lo12:_bss_start
+        \\ adrp x17, _bss_end
+        \\ add x17, x17, :lo12:_bss_end
+        \\ 1:
+        \\ stp xzr, xzr, [x16], #16
+        \\ cmp x16, x17
+        \\ blo 1b
         \\ mov x0, #0
         \\ b arch_init
         \\ b . // unreachable
