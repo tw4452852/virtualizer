@@ -8,5 +8,6 @@ pub fn print(comptime fmt: []const u8, args: anytype) void {
     const bytes = std.fmt.bufPrint(&buf, fmt, args) catch unreachable;
     const driver = Driver.init(base);
 
+    defer driver.putc('\r');
     for (bytes) |c| driver.putc(c);
 }
