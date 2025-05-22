@@ -43,7 +43,7 @@ pub fn restore(self: *const Self) noreturn {
         : "memory"
     );
 
-    while (true) {}
+    unreachable;
 }
 
 extern var vm_pgd: [512]u64 align(1 << 12);
@@ -81,6 +81,7 @@ extern const vcpus: [*]Self;
 extern var start_core_id: u64;
 extern fn secondary_start() callconv(.Naked) noreturn;
 extern fn va2pa(va: u64) u64;
+var onlined_cpus: usize = 0;
 
 pub fn handle_smc(self: *Self) void {
     const id: u32 = @truncate(self.x[0]);
@@ -95,15 +96,16 @@ pub fn handle_smc(self: *Self) void {
         4 => switch (function) { // PSCI is part of Standard service(4)
             psci_version => self.x[0] = (1 << 16), // PSCI version 1.0
             cpuon => {
-                const target_cpu = self.x[1];
+                const target_cpu_mpidr = self.x[1];
                 const entry_addr = self.x[2];
                 const context_id = self.x[3];
+                onlined_cpus += 1;
 
-                lib.print("Prepare to power on CPU{}, entry_addr: {x}, context_id: {x}\n", .{ target_cpu, entry_addr, context_id });
-                start_core_id = target_cpu;
-                vcpus[target_cpu].x[0] = context_id;
-                vcpus[target_cpu].x[ELR] = entry_addr;
-                vcpus[target_cpu].x[SPSR] = (1 << 9) | (1 << 8) | (1 << 7) | (1 << 6) | 5; // EL1h
+                lib.print("Prepare to power on CPU{} (MPIDR: {x}), entry_addr: {x}, context_id: {x}\n", .{ onlined_cpus, target_cpu_mpidr, entry_addr, context_id });
+                start_core_id = onlined_cpus;
+                vcpus[onlined_cpus].x[0] = context_id;
+                vcpus[onlined_cpus].x[ELR] = entry_addr;
+                vcpus[onlined_cpus].x[SPSR] = (1 << 9) | (1 << 8) | (1 << 7) | (1 << 6) | 5; // EL1h
                 const secondary_start_pa: u64 = va2pa(@intFromPtr(&secondary_start));
                 psci_call(self.x[0], self.x[1], secondary_start_pa, self.x[3]);
                 lib.print("Waiting\n", .{});

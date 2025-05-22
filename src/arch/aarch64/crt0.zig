@@ -7,7 +7,7 @@ const GIC2 = @import("gic2.zig");
 
 const start_va = (2 << 20); // match with the definition of _start in linker.ld
 
-const max_cpus = 32;
+const max_cpus = 64;
 export var stack_bytes: [max_cpus][4 * 1024]u8 align(1 << 12) linksection(".bss") = undefined;
 export var pgd: [512]u64 align(1 << 12) = .{0} ** 512;
 export var vm_pgd: [512]u64 align(1 << 12) = .{0} ** 512;
