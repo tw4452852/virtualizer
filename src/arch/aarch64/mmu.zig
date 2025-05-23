@@ -56,6 +56,8 @@ fn print(comptime fmt: []const u8, args: anytype) void {
 
 pub fn enable() void {
     asm volatile (
+        \\ ldr x11, =tmp_vector_table
+        \\ msr vbar_el2, x11 // use virtual address of the temporary vector table
         \\ msr mair_el2, %[mair]
         \\ msr tcr_el2, %[tcr]
         \\ isb
@@ -77,10 +79,47 @@ pub fn enable() void {
         \\ orr x11, x11, #(1 << 2) // SCTLR_EL2_C
         \\ orr x11, x11, #(1 << 12) // SCTLR_EL2_I
         \\ msr sctlr_el2, x11
+        \\ isb // will trigger exception
+        \\ .align 11
+        \\ tmp_vector_table:
+        \\ adr x11, vector_table // We're in the MMU enabled now, restore vector table to normal one
+        \\ msr vbar_el2, x11
         \\ isb
+        \\ adr x11, _mmu_enabled
+        \\ br x11
+        \\ .align 7
+        \\ b unexpected_exception // IRQ EL2t
+        \\ .align 7
+        \\ b unexpected_exception // FIQ EL2t
+        \\ .align 7
+        \\ b unexpected_exception // SError EL2t
+        \\ .align 7
+        \\ b tmp_vector_table // Synchronous EL2h
+        \\ .align 7
+        \\ b unexpected_exception // IRQ EL2h
+        \\ .align 7
+        \\ b unexpected_exception // FIQ EL2h
+        \\ .align 7
+        \\ b unexpected_exception // SError EL2h
+        \\ .align 7
+        \\ b unexpected_exception // Synchronous 64bit lower EL
+        \\ .align 7
+        \\ b unexpected_exception // IRQ 64bit lower EL
+        \\ .align 7
+        \\ b unexpected_exception // FIQ 64bit lower EL
+        \\ .align 7
+        \\ b unexpected_exception // SError 64bit lower EL
+        \\ .align 7
+        \\ b unexpected_exception // Synchronous 32bit lower EL
+        \\ .align 7
+        \\ b unexpected_exception // IRQ 32bit lower EL
+        \\ .align 7
+        \\ b unexpected_exception // FIQ 32bit lower EL
+        \\ .align 7
+        \\ b unexpected_exception // SError 32bit lower EL
         :
-        : [mair] "{x10}" (mair),
-          [tcr] "{x11}" (tcr),
+        : [mair] "r" (mair),
+          [tcr] "r" (tcr),
         : "memory"
     );
 }

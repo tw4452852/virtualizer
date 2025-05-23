@@ -117,6 +117,11 @@ export fn secondary_init(cpu: u64) noreturn {
     arch_init(cpu);
 }
 
+export fn unexpected_exception() callconv(.c) noreturn {
+    lib.print("unexpected exception\n", .{});
+    lib.spin();
+}
+
 comptime {
     for (0..16) |i| {
         const S = struct {
@@ -211,17 +216,14 @@ export fn arch_init(cpu: u64) noreturn {
     enable_mmu(cpu);
 
     asm volatile (
-        \\ mov x0, %[cpu]
-        \\ ldr x8, =stack_bytes
-        \\ add x8, x8, x0, lsl #12
-        \\ add x8, x8, #0x1000
+        \\ .global _mmu_enabled
+        \\ _mmu_enabled:
+        \\ mrs x8, tpidr_el2
+        \\ and x0, x8, #0xfff // lower 12bits hold cpu id
+        \\ bic x8, x8, #0xfff
         \\ mov sp, x8
-        \\ ldr x8, =vector_table
-        \\ msr vbar_el2, x8
-        \\ ldr x8, =mmu_enabled
+        \\ adr x8, mmu_enabled
         \\ br x8
-        :
-        : [cpu] "r" (cpu),
     );
 
     lib.spin();
@@ -229,6 +231,7 @@ export fn arch_init(cpu: u64) noreturn {
 
 extern var start_core_id: u64;
 export fn mmu_enabled(cpu: u64) noreturn {
+    lib.print("cpu{} mmu enabled\n", .{cpu});
     if (cpu == 0) {
         asm volatile ("b main");
     } else {
@@ -278,33 +281,17 @@ fn enable_mmu(cpu: u64) void {
 
         lib.print("real load range: {x}, end: {x}\n", .{ start_pa, end_pa });
         const len = std.mem.alignForward(u64, end_pa - start_pa, std.heap.page_size_min);
-        add_identical_mapping();
         _ = lib.mmu.map_normal(&pgd, start_pa, start_va, len);
         _ = lib.mmu.map_device(&pgd, serial.base, serial.base, 0x1000);
         // must be put after mmu.map because it relies on va_offset
         va_offset = @as(i64, @bitCast(start_pa)) - start_va;
-
-        asm volatile ("msr tpidr_el2, %[va]"
-            :
-            : [va] "r" (pa2va(@intFromPtr(&stack_bytes[0]) + 0x1000)),
-        );
     }
+
+    // update tpidr_el2 with virtual address
+    asm volatile ("msr tpidr_el2, %[tpidr]"
+        :
+        : [tpidr] "r" (pa2va(lib.get_tpidr_el2())),
+    );
 
     lib.mmu.enable();
-
-    lib.print("MMU enabled\n", .{});
-}
-
-fn add_identical_mapping() void {
-    const len = std.mem.alignForward(u64, end_pa - start_pa, std.heap.page_size_min);
-    _ = lib.mmu.map_normal(&pgd, start_pa, start_pa, len); // temporary identical mapping, will be unmapped after MMU enable
-}
-
-fn remove_identical_mapping() void {
-    if (va_offset == 0) {
-        return;
-    }
-
-    const len = std.mem.alignForward(u64, end_pa - start_pa, std.mem.page_size);
-    lib.mmu.unmap(&pgd, va2pa(start_va), len);
 }

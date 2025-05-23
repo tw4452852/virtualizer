@@ -17,14 +17,17 @@ pub fn spin() noreturn {
     while (true) {}
 }
 
-pub fn cpu_idx() usize {
+pub fn get_tpidr_el2() u64 {
     var tpidr: u64 = undefined;
 
     asm volatile ("mrs %[tpidr], tpidr_el2"
         : [tpidr] "=r" (tpidr),
     );
+    return tpidr;
+}
 
-    return tpidr & 0xfff;
+pub fn cpu_idx() usize {
+    return get_tpidr_el2() & 0xfff;
 }
 
 extern fn va2pa(va: u64) u64;
