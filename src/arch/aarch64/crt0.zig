@@ -29,7 +29,7 @@ export fn _start() callconv(.Naked) noreturn {
         \\ adr x16, vector_table
         \\ msr vbar_el2, x16
         \\ adrp x16, stack_bytes
-        \\ add x16, x16, #0x16000
+        \\ add x16, x16, #0x1000
         \\ msr tpidr_el2, x16
         \\ mov sp, x16
         \\ adr x16, dtb_pa
