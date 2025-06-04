@@ -59,11 +59,13 @@ pub fn enable(_: *const Self) void {
     const vtcr_el2: u64 = (64 - 39) | (1 << 6) | (1 << 8) | (1 << 10) | (3 << 12) | (1 << 31) | (2 << 16); // 40-bit IPA
     const vm_pgd_pa: u64 = (vm_pgd[0] >> 12) << 12;
     const hcr: u64 = hcr_vm | hcr_rw | hcr_amo | hcr_imo | hcr_fmo | hcr_tsc;
+    const cnthctl: u64 = 3; // don't trap access to physical timer registers
     asm volatile (
         \\ dsb sy
         \\ msr vttbr_el2, %[vm_pgd]
         \\ msr sctlr_el1, %[sctlr_el1]
         \\ msr vtcr_el2, %[vtcr]
+        \\ msr cnthctl_el2, %[cnthctl]
         \\ isb sy
         \\ msr hcr_el2, %[hcr]
         \\ isb
@@ -72,6 +74,7 @@ pub fn enable(_: *const Self) void {
           [vm_pgd] "r" (vm_pgd_pa),
           [sctlr_el1] "r" (0x30d00800),
           [vtcr] "r" (vtcr_el2),
+          [cnthctl] "r" (cnthctl),
     );
 
     gic2.enable_vcpuif();
