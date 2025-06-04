@@ -93,6 +93,7 @@ pub fn handle_smc(self: *Self) void {
 
     const psci_version = 0;
     const cpuon = 3;
+    const shutdown = 8;
 
     lib.print("handle smc, sv: {x}, fn: {x}\n", .{ service, function });
     switch (service) {
@@ -117,8 +118,14 @@ pub fn handle_smc(self: *Self) void {
 
                 self.x[0] = 0;
             },
+            shutdown => {
+                lib.print("shutdown vm\n", .{});
+                self.callstack();
+                lib.spin();
+            },
             else => self.x[0] = 0xffff_ffff, // NOT SUPPORT
         },
+
         else => {
             @panic("TODO");
         },
@@ -146,5 +153,53 @@ pub fn handle_irq(_: *Self) void {
         gic2.inject_virq(v);
 
         gic2.eoi(v);
+    }
+}
+
+fn callstack(self: *const Self) void {
+    const el = (self.x[SPSR] >> 2) & 3;
+    lib.print("EL{}, ELR: {x}\n", .{ el, self.x[ELR] });
+
+    var fp = self.x[29];
+    var lr: u64 = undefined;
+    while (fp > 0) {
+        asm volatile (
+            \\ cmp xzr, %[el]
+            \\ bne 998f
+            \\ at S12E0R, %[fp]
+            \\ b 999f
+            \\ 998:
+            \\ at S12E1R, %[fp]
+            \\ 999:
+            \\ mrs %[lr], par_el1
+            : [lr] "=r" (lr),
+            : [el] "r" (el),
+              [fp] "r" (fp),
+            : "memory"
+        );
+
+        if (lr & 1 == 1) {
+            lib.print("translate failure, par_el1: {x}\n", .{lr});
+            break;
+        }
+
+        fp = (((lr >> 12) & 0xfffffffff) << 12) | (fp & 0xfff);
+        _ = lib.emergency_map(fp);
+        asm volatile (
+            \\ at S1E2R, %[fp]
+            \\ mrs %[lr], par_el1
+            : [lr] "=r" (lr),
+            : [fp] "r" (fp),
+        );
+        if (lr & 1 == 1) {
+            lib.print("hypervisor translate failure , fp: {x}, par_el1: {x}\n", .{ fp, lr });
+            break;
+        }
+
+        const ptr: *const [2]u64 = @ptrFromInt(fp);
+        if (ptr[1] != 0) {
+            lib.print("{x}\n", .{ptr[1]});
+        }
+        fp = ptr[0];
     }
 }
