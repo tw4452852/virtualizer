@@ -184,7 +184,7 @@ fn callstack(self: *const Self) void {
         }
 
         fp = (((lr >> 12) & 0xfffffffff) << 12) | (fp & 0xfff);
-        _ = lib.emergency_map(fp);
+        const ptr: *const [2]u64 = @alignCast(@ptrCast(lib.emergency_map(fp)));
         asm volatile (
             \\ at S1E2R, %[fp]
             \\ mrs %[lr], par_el1
@@ -196,7 +196,6 @@ fn callstack(self: *const Self) void {
             break;
         }
 
-        const ptr: *const [2]u64 = @ptrFromInt(fp);
         if (ptr[1] != 0) {
             lib.print("{x}\n", .{ptr[1]});
         }

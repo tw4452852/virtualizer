@@ -143,5 +143,5 @@ pub fn start_vm(kernel_image: []const u8) noreturn {
 pub fn emergency_map(paddr: u64) [*]u8 {
     const sz = (1 << 12);
     const align_paddr = std.mem.alignBackward(u64, paddr, sz);
-    return mmu.map_normal(&pgd, align_paddr, align_paddr, sz).?;
+    return mmu.map_normal(&pgd, align_paddr, align_paddr, sz).? + (paddr - align_paddr);
 }
