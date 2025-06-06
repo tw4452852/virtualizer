@@ -188,7 +188,7 @@ export fn exception_handler(n: usize) noreturn {
 
     const el = (spsr >> 2) & 3;
     const cpu = lib.cpu_idx();
-    //lib.print("exception {} taken from EL{} on CPU{}, esr: {x}, far: {x}, pc: {x}, hpfar: {x}\n", .{ n, el, cpu, esr, far, pc, hpfar });
+
     const ec = (esr >> 26) & 0x3f;
     const isv = (esr >> 24) & 1;
     if (el < 2) {
@@ -202,8 +202,12 @@ export fn exception_handler(n: usize) noreturn {
             _vcpus[cpu].handle_irq();
             _vcpus[cpu].restore();
         }
+
+        // unsupported trap
+        _vcpus[cpu].callstack();
     }
 
+    lib.print("exception {} taken from EL{} on CPU{}, esr: {x}, far: {x}, pc: {x}, hpfar: {x}\n", .{ n, el, cpu, esr, far, pc, hpfar });
     lib.spin();
 }
 

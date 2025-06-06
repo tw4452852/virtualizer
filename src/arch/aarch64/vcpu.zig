@@ -154,12 +154,37 @@ pub fn handle_irq(_: *Self) void {
     }
 }
 
-fn callstack(self: *const Self) void {
+pub fn callstack(self: *const Self) void {
     const el = (self.x[SPSR] >> 2) & 3;
-    lib.print("EL{}, ELR: {x}\n", .{ el, self.x[ELR] });
 
-    var fp = self.x[29];
     var lr: u64 = undefined;
+    var fp = self.x[ELR];
+
+    asm volatile (
+        \\ cmp xzr, %[el]
+        \\ bne 998f
+        \\ at S12E0R, %[fp]
+        \\ b 999f
+        \\ 998:
+        \\ at S12E1R, %[fp]
+        \\ 999:
+        \\ mrs %[lr], par_el1
+        : [lr] "=r" (lr),
+        : [el] "r" (el),
+          [fp] "r" (fp),
+        : "memory"
+    );
+    lib.print("EL{}, ELR: {x}\n", .{ el, self.x[ELR] });
+    if (lr & 1 == 0) {
+        fp = (((lr >> 12) & 0xfffffffff) << 12) | (fp & 0xfff);
+        const ptr = lib.emergency_map(fp);
+        for (0..4) |i| {
+            lib.print("{x:02}\n", .{ptr[i]});
+        }
+    }
+
+    fp = self.x[29];
+
     while (fp > 0) {
         asm volatile (
             \\ cmp xzr, %[el]
