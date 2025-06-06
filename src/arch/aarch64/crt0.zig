@@ -3,7 +3,7 @@ const serial = @import("serial.zig");
 const lib = @import("root.zig");
 const mmu = @import("mmu.zig");
 const VCPU = @import("vcpu.zig");
-const GIC2 = @import("gic2.zig");
+const GIC = @import("gic.zig");
 
 const start_va = (2 << 20); // match with the definition of _start in linker.ld
 
@@ -15,8 +15,8 @@ var _vcpus: [max_cpus]VCPU = .{VCPU{}} ** max_cpus;
 export const vcpus: *[max_cpus]VCPU = &_vcpus;
 export var start_pa: u64 = 0;
 export var end_pa: u64 = 0;
-var _gicv2: GIC2 = .{};
-export var gic2: *GIC2 = &_gicv2;
+var _gic: GIC = .{};
+export var gic: *GIC = &_gic;
 
 pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
     const first_trace_addr = ret_addr orelse @returnAddress();

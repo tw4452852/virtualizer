@@ -1,6 +1,6 @@
 const std = @import("std");
 const VCPU = @import("vcpu.zig");
-pub const GIC2 = @import("gic2.zig");
+pub const GIC = @import("gic.zig");
 pub const mmu = @import("mmu.zig");
 const c = @cImport({
     @cInclude("libfdt.h");
@@ -37,7 +37,7 @@ extern var end_pa: u64;
 extern var pgd: [512]u64 align(1 << 12);
 extern var vm_pgd: [512]u64 align(1 << 12);
 extern var vcpus: *[32]VCPU;
-extern var gic2: *GIC2;
+extern var gic: *GIC;
 
 const ImageHeader = extern struct {
     code0: u32,
@@ -122,8 +122,8 @@ pub fn start_vm(kernel_image: []const u8) noreturn {
         mmu.map_normal_s2(&vm_pgd, addr, addr, size);
     }
 
-    if (!gic2.init(dtb)) {
-        print("failed to initialize GICv2\n", .{});
+    if (!gic.init(dtb)) {
+        print("failed to initialize GIC\n", .{});
     }
 
     ret = c.fdt_pack(dtb);

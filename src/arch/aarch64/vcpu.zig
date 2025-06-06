@@ -47,7 +47,7 @@ pub fn restore(self: *const Self) noreturn {
 }
 
 extern var vm_pgd: [512]u64 align(1 << 12);
-extern var gic2: *lib.GIC2;
+extern var gic: *lib.GIC;
 pub fn enable(_: *const Self) void {
     const hcr_vm = (1 << 0);
     const hcr_rw = (1 << 31);
@@ -77,7 +77,7 @@ pub fn enable(_: *const Self) void {
           [cnthctl] "r" (cnthctl),
     );
 
-    gic2.enable_vcpuif();
+    gic.enable_vcpuif();
 }
 
 extern const vcpus: [*]Self;
@@ -141,7 +141,7 @@ fn psci_call(_: u64, _: u64, _: u64, _: u64) callconv(.C) void {
 
 pub fn handle_irq(_: *Self) void {
     while (true) {
-        const v = gic2.ack_irq();
+        const v = gic.ack_irq();
         const irq = v & 0x3ff;
 
         if (irq == 1023) { // no more pending irqs
@@ -150,9 +150,7 @@ pub fn handle_irq(_: *Self) void {
 
         //if (irq != 0x1b) lib.print("get irq {x} on CPU{}\n", .{ v, lib.cpu_idx() });
 
-        gic2.inject_virq(v);
-
-        gic2.eoi(v);
+        gic.inject_virq(v);
     }
 }
 

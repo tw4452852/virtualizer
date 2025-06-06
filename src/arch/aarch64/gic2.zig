@@ -91,29 +91,26 @@ cpu_if: *volatile CPU_IF = undefined,
 dist: *volatile DIST = undefined,
 num_lrs: usize = 0,
 maintenance_irq: u32 = 25, // TODO: retrieve from dtb
-initialized: bool = false,
 
 extern var pgd: [512]u64 align(1 << 12);
 extern var vm_pgd: [512]u64 align(1 << 12);
 
-pub fn init(self: *Self, dtb: ?[*]u8) bool {
-    if (self.initialized) {
-        @panic("already initialized gicv2");
-    }
+pub fn init(dtb: ?[*]u8) ?Self {
+    var self: Self = .{};
     const root_node_offset = c.fdt_path_offset(dtb, "/");
     if (root_node_offset < 0) {
-        print("failed to find root node: {}\n", .{root_node_offset});
-        return false;
+        print("GICv2: failed to find root node: {}\n", .{root_node_offset});
+        return null;
     }
     var gic_node_offset = c.fdt_first_subnode(dtb, root_node_offset);
     while (gic_node_offset >= 0) : (gic_node_offset = c.fdt_next_subnode(dtb, gic_node_offset)) {
         if (c.fdt_getprop(dtb, gic_node_offset, "interrupt-controller", null) != null) break;
     } else {
-        print("failed to find interrupt controller\n", .{});
-        return false;
+        print("GICv2: failed to find interrupt controller\n", .{});
+        return null;
     }
     var len: c_int = undefined;
-    const pp = c.fdt_get_property(dtb, gic_node_offset, "reg", &len).?;
+    const data: [*c]const u8 = @ptrCast(c.fdt_getprop(dtb, gic_node_offset, "reg", &len).?);
     var gicd_addr: u64 = 0;
     var gicd_size: u64 = 0;
     var gich_addr: u64 = 0;
@@ -124,11 +121,10 @@ pub fn init(self: *Self, dtb: ?[*]u8) bool {
     var gicv_size: u64 = 0;
     for (0..@as(c_uint, @bitCast(len)) / 16) |i| {
         @setRuntimeSafety(false);
-        const data = pp.*.data();
 
         const addr = c.fdt64_to_cpu(@as(*const u64, @alignCast(@ptrCast(data + i * 16))).*);
         const size = c.fdt64_to_cpu(@as(*const u64, @alignCast(@ptrCast(data + i * 16 + 8))).*);
-        print("gic reg {}: addr: {x}, size: {x}\n", .{ i, addr, size });
+        print("GICv2: reg {}: addr: {x}, size: {x}\n", .{ i, addr, size });
 
         if (i == 0) {
             gicd_addr = addr;
@@ -154,28 +150,25 @@ pub fn init(self: *Self, dtb: ?[*]u8) bool {
 
         const regs = [_]u64{ c.cpu_to_fdt64(gicd_addr), c.cpu_to_fdt64(gicd_size), c.cpu_to_fdt64(gicc_addr), c.cpu_to_fdt64(gicc_size) };
         if (c.fdt_setprop(dtb, gic_node_offset, "reg", &regs, @sizeOf(@TypeOf(regs))) != 0) {
-            print("failed to update gic node\n", .{});
-            return false;
+            print("GICv2: failed to update gic node\n", .{});
+            return null;
         }
     } else {
-        print("invalid gic regions: gicc: {x}@{x}, gich: {x}@{x}, gicv: {x}@{x}\n", .{ gicc_size, gicc_addr, gich_size, gich_addr, gicv_size, gicv_addr });
-        return false;
+        print("GICv2: invalid gic regions: gicc: {x}@{x}, gich: {x}@{x}, gicv: {x}@{x}\n", .{ gicc_size, gicc_addr, gich_size, gich_addr, gicv_size, gicv_addr });
+        return null;
     }
 
     self.num_lrs = (self.vcpu_ctl.vtr & 0xf3) + 1;
     print("GICv2: {} LRs\n", .{self.num_lrs});
-    self.initialized = true;
 
-    return true;
+    return self;
 }
 
 pub fn enable_vcpuif(self: *Self) void {
-    if (self.initialized) {
-        self.cpu_if.icontrol = 3 | (1 << 9); // enable group0&1, EOImode = 1
-        self.cpu_if.pri_msk_c = 0xf0;
-        self.cpu_if.pb_c = 3;
-        self.vcpu_ctl.hcr = 1;
-    }
+    self.cpu_if.icontrol = 3 | (1 << 9); // enable group0&1, EOImode = 1
+    self.cpu_if.pri_msk_c = 0xf0;
+    self.cpu_if.pb_c = 3;
+    self.vcpu_ctl.hcr = 1;
 }
 
 /// we handle maintenance irq internally
@@ -201,7 +194,7 @@ pub fn ack_irq(self: *const Self) u32 {
     } else return v;
 }
 
-pub fn eoi(self: *const Self, v: u32) void {
+fn eoi(self: *const Self, v: u32) void {
     self.cpu_if.eoi = v;
 }
 
@@ -240,4 +233,6 @@ pub fn inject_virq(self: *const Self, v: u32) void {
     } else {
         print("no room in LRs, skip irq {x}\n", .{v});
     }
+
+    self.eoi(v);
 }
