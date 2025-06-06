@@ -20,7 +20,7 @@ const page_shift = (page_bits);
 const page_size = 1 << page_shift;
 const page_mask = (1 << page_bits) - 1;
 
-const num_pages = 64;
+const num_pages = 128;
 var pages: [num_pages * page_size]u8 align(page_size) = undefined;
 var freed = std.StaticBitSet(num_pages).initFull();
 

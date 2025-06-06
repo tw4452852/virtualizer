@@ -201,6 +201,30 @@ export fn exception_handler(n: usize) noreturn {
         } else if (n == 9) {
             _vcpus[cpu].handle_irq();
             _vcpus[cpu].restore();
+        } else if (n == 8 and ec == 0x18) {
+            const SYSREG_ENC = packed struct(u25) {
+                r: u1,
+                CRm: u4,
+                Rt: u5,
+                CRn: u4,
+                op1: u3,
+                op2: u3,
+                op0: u2,
+                res0: u3,
+            };
+
+            const reg: SYSREG_ENC = @bitCast(@as(u25, @truncate(esr & 0x1ffffff)));
+
+            if (reg.op0 == 3 and reg.op1 == 0 and reg.CRn == 12 and reg.CRm == 11 and reg.op2 == 5) { // icc_sgir
+                if (reg.r == 0) { // write
+                    asm volatile ("msr icc_sgi1r_el1, %[icc_sgir]"
+                        :
+                        : [icc_sgir] "r" (_vcpus[cpu].x[reg.Rt]),
+                    );
+                }
+            }
+            _vcpus[cpu].x[VCPU.ELR] += 4;
+            _vcpus[cpu].restore();
         }
 
         // unsupported trap
