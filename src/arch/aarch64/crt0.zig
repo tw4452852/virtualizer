@@ -24,7 +24,7 @@ pub fn panic(msg: []const u8, _: ?*std.builtin.StackTrace, ret_addr: ?usize) nor
     while (true) {}
 }
 
-export fn _start() callconv(.Naked) noreturn {
+export fn _start() callconv(.naked) noreturn {
     asm volatile (
         \\ adr x16, vector_table
         \\ msr vbar_el2, x16
@@ -88,7 +88,7 @@ export fn _start() callconv(.Naked) noreturn {
     );
 }
 
-export fn secondary_start() callconv(.Naked) noreturn {
+export fn secondary_start() callconv(.naked) noreturn {
     asm volatile (
         \\ msr spsel, #1
         \\ adr x1, vector_table
@@ -125,7 +125,7 @@ export fn unexpected_exception() callconv(.c) noreturn {
 comptime {
     for (0..16) |i| {
         const S = struct {
-            fn exception_handler_begin() callconv(.Naked) noreturn {
+            fn exception_handler_begin() callconv(.naked) noreturn {
                 asm volatile (
                     \\ stp x0,  x1,  [sp, #16 * 0]
                     \\ stp x2,  x3,  [sp, #16 * 1]

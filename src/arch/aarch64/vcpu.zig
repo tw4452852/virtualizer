@@ -40,7 +40,7 @@ pub fn restore(self: *const Self) noreturn {
         \\ eret
         :
         : [generals] "r" (&self.x),
-        : "memory"
+        : .{ .memory = true }
     );
 
     unreachable;
@@ -82,7 +82,7 @@ pub fn enable(_: *const Self) void {
 
 extern const vcpus: [*]Self;
 extern var start_core_id: u64;
-extern fn secondary_start() callconv(.Naked) noreturn;
+extern fn secondary_start() callconv(.naked) noreturn;
 extern fn va2pa(va: u64) u64;
 var onlined_cpus: usize = 0;
 
@@ -135,7 +135,7 @@ pub fn handle_smc(self: *Self) void {
     self.x[ELR] += 4;
 }
 
-fn psci_call(_: u64, _: u64, _: u64, _: u64) callconv(.C) void {
+fn psci_call(_: u64, _: u64, _: u64, _: u64) callconv(.c) void {
     asm volatile ("smc #0");
 }
 
@@ -172,7 +172,7 @@ pub fn callstack(self: *const Self) void {
         : [lr] "=r" (lr),
         : [el] "r" (el),
           [fp] "r" (fp),
-        : "memory"
+        : .{ .memory = true }
     );
     lib.print("EL{}, ELR: {x}\n", .{ el, self.x[ELR] });
     if (lr & 1 == 0) {
@@ -198,7 +198,7 @@ pub fn callstack(self: *const Self) void {
             : [lr] "=r" (lr),
             : [el] "r" (el),
               [fp] "r" (fp),
-            : "memory"
+            : .{ .memory = true }
         );
 
         if (lr & 1 == 1) {
@@ -207,7 +207,7 @@ pub fn callstack(self: *const Self) void {
         }
 
         fp = (((lr >> 12) & 0xfffffffff) << 12) | (fp & 0xfff);
-        const ptr: *const [2]u64 = @alignCast(@ptrCast(lib.emergency_map(fp)));
+        const ptr: *const [2]u64 = @ptrCast(@alignCast(lib.emergency_map(fp)));
         asm volatile (
             \\ at S1E2R, %[fp]
             \\ mrs %[lr], par_el1

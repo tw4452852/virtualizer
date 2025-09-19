@@ -120,7 +120,7 @@ pub fn enable() void {
         :
         : [mair] "r" (mair),
           [tcr] "r" (tcr),
-        : "memory"
+        : .{ .memory = true }
     );
 }
 
@@ -134,7 +134,7 @@ pub fn disable() void {
         \\ bic x1, x1, #(1 << 12) // SCTLR_EL2_I
         \\ msr sctlr_el2, x1
         \\ isb
-        ::: "memory", "x1");
+        ::: .{ .memory = true, .x1 = true });
 }
 
 inline fn pte_is_valid(pte: u64) bool {
@@ -186,7 +186,7 @@ fn map(pgd: *[512]u64, pa: u64, va: u64, len: u64, mem_attr: u64) ?[*]u8 {
         return null;
     }
 
-    defer if (!is_test) asm volatile ("dsb sy" ::: "memory");
+    defer if (!is_test) asm volatile ("dsb sy" ::: .{ .memory = true });
     for ((unmapped_va >> pgd_shift) & pgd_mask..512) |pgd_idx| {
         if (!pte_is_valid(pgd[pgd_idx])) {
             if (freed.toggleFirstSet()) |i| {
@@ -281,7 +281,7 @@ pub fn unmap(pgd: *[512]u64, va: u64, len: u64) void {
         return;
     }
 
-    defer if (!is_test) asm volatile ("dsb sy" ::: "memory");
+    defer if (!is_test) asm volatile ("dsb sy" ::: .{ .memory = true });
     for ((unmapped_va >> pgd_shift) & pgd_mask..512) |pgd_idx| {
         if (pte_is_valid(pgd[pgd_idx])) {
             const pud = ptrFromPte(*[512]u64, pgd[pgd_idx]);

@@ -116,8 +116,8 @@ pub fn start_vm(kernel_image: []const u8) noreturn {
         @setRuntimeSafety(false);
         const data = pp.*.data();
 
-        const addr = c.fdt64_to_cpu(@as(*const u64, @alignCast(@ptrCast(data + i * 16))).*);
-        const size = c.fdt64_to_cpu(@as(*const u64, @alignCast(@ptrCast(data + i * 16 + 8))).*);
+        const addr = c.fdt64_to_cpu(@as(*const u64, @ptrCast(@alignCast(data + i * 16))).*);
+        const size = c.fdt64_to_cpu(@as(*const u64, @ptrCast(@alignCast(data + i * 16 + 8))).*);
         print("memory {}: addr: {x}, size: {x}\n", .{ i, addr, size });
         mmu.map_normal_s2(&vm_pgd, addr, addr, size);
     }

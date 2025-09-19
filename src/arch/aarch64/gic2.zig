@@ -122,8 +122,8 @@ pub fn init(dtb: ?[*]u8) ?Self {
     for (0..@as(c_uint, @bitCast(len)) / 16) |i| {
         @setRuntimeSafety(false);
 
-        const addr = c.fdt64_to_cpu(@as(*const u64, @alignCast(@ptrCast(data + i * 16))).*);
-        const size = c.fdt64_to_cpu(@as(*const u64, @alignCast(@ptrCast(data + i * 16 + 8))).*);
+        const addr = c.fdt64_to_cpu(@as(*const u64, @ptrCast(@alignCast(data + i * 16))).*);
+        const size = c.fdt64_to_cpu(@as(*const u64, @ptrCast(@alignCast(data + i * 16 + 8))).*);
         print("GICv2: reg {}: addr: {x}, size: {x}\n", .{ i, addr, size });
 
         if (i == 0) {
@@ -142,9 +142,9 @@ pub fn init(dtb: ?[*]u8) ?Self {
     }
 
     if (gicv_size > 0 and gicc_size == gicv_size and gich_size > 0) {
-        self.vcpu_ctl = @alignCast(@ptrCast(mmu.map_device(&pgd, gich_addr, gich_addr, gich_size)));
-        self.cpu_if = @alignCast(@ptrCast(mmu.map_device(&pgd, gicc_addr, gicc_addr, gicc_size)));
-        self.dist = @alignCast(@ptrCast(mmu.map_device(&pgd, gicd_addr, gicd_addr, gicd_size)));
+        self.vcpu_ctl = @ptrCast(@alignCast(mmu.map_device(&pgd, gich_addr, gich_addr, gich_size)));
+        self.cpu_if = @ptrCast(@alignCast(mmu.map_device(&pgd, gicc_addr, gicc_addr, gicc_size)));
+        self.dist = @ptrCast(@alignCast(mmu.map_device(&pgd, gicd_addr, gicd_addr, gicd_size)));
         // map gicv as gicc for VM
         mmu.map_normal_s2(&vm_pgd, gicv_addr, gicc_addr, gicv_size);
 

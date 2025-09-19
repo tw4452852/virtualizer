@@ -37,8 +37,8 @@ pub fn init(dtb: ?[*]u8) ?Self {
     const data: [*c]const u8 = @ptrCast(c.fdt_getprop(dtb, gic_node_offset, "reg", null).?);
 
     // Redistributor is the 2nd region, the 1st one is distributor
-    const gicr_addr: u64 = c.fdt64_to_cpu(@as(*align(1) const u64, @alignCast(@ptrCast(data + 16))).*);
-    const gicr_size: u64 = c.fdt64_to_cpu(@as(*align(1) const u64, @alignCast(@ptrCast(data + 24))).*);
+    const gicr_addr: u64 = c.fdt64_to_cpu(@as(*align(1) const u64, @ptrCast(@alignCast(data + 16))).*);
+    const gicr_size: u64 = c.fdt64_to_cpu(@as(*align(1) const u64, @ptrCast(@alignCast(data + 24))).*);
     print("GICv3: redir: addr: {x}, size: {x}\n", .{ gicr_addr, gicr_size });
     self.rds = mmu.map_device(&pgd, gicr_addr, gicr_addr, gicr_size);
 
@@ -245,8 +245,8 @@ fn deactive(irq: u32) void {
 fn enable_maintainance_irq(self: *const Self) void {
     const idx = self.maintenance_irq >> 5;
     const bit = self.maintenance_irq & 0x1f;
-    const isenable0: *volatile u32 = @alignCast(@ptrCast(self.rds + (128 << 10) * @import("root.zig").cpu_idx() + (64 << 10) + 0x100));
-    const ipriority6: *volatile u32 = @alignCast(@ptrCast(self.rds + (128 << 10) * @import("root.zig").cpu_idx() + (64 << 10) + 0x400 + 6 * 4));
+    const isenable0: *volatile u32 = @ptrCast(@alignCast(self.rds + (128 << 10) * @import("root.zig").cpu_idx() + (64 << 10) + 0x100));
+    const ipriority6: *volatile u32 = @ptrCast(@alignCast(self.rds + (128 << 10) * @import("root.zig").cpu_idx() + (64 << 10) + 0x400 + 6 * 4));
 
     std.debug.assert(idx == 0);
     isenable0.* = @as(u32, 1) << @truncate(bit);

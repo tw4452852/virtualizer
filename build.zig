@@ -30,15 +30,19 @@ pub fn build(b: *std.Build) void {
     });
     const crt0 = b.addObject(.{
         .name = "crt0",
-        .root_source_file = b.path(b.fmt("{s}/crt0.zig", .{prefix})),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path(b.fmt("{s}/crt0.zig", .{prefix})),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     const exe = b.addExecutable(.{
         .name = "image.elf",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     exe.addObject(crt0);
     exe.root_module.addImport("arch", arch_mod);
